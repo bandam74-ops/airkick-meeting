@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>에어킥 회의록</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">AIR-KICK <span>회의록</span></div>
+    <div class="top-right">
+      <span id="mode-badge" class="badge"></span>
+      <span id="user-name" class="user"></span>
+      <button id="logout-btn" class="btn ghost small" hidden>로그아웃</button>
+    </div>
+  </header>
+
+  <!-- 로그인 -->
+  <section id="login-view" class="login" hidden>
+    <form id="login-form" class="login-card">
+      <h1>운영진 로그인</h1>
+      <p class="muted">에어킥태권도 운영진 계정으로 로그인하세요.</p>
+      <label>이메일<input type="email" id="login-email" required autocomplete="username" /></label>
+      <label>비밀번호<input type="password" id="login-pw" required autocomplete="current-password" /></label>
+      <button class="btn primary" type="submit">로그인</button>
+      <p id="login-error" class="error"></p>
+    </form>
+  </section>
+
+  <!-- 메인 -->
+  <main id="app-view" class="layout" hidden>
+    <aside class="sidebar">
+      <div class="new-box">
+        <label class="muted small">새 회의록 날짜</label>
+        <input type="date" id="new-date" />
+        <label class="check-inline"><input type="checkbox" id="copy-prev" checked /> 이전 회의록 내용 복사</label>
+        <button id="new-btn" class="btn primary full">+ 새 회의록</button>
+      </div>
+      <input type="search" id="search" placeholder="검색 (내용·날짜)" />
+      <ul id="meeting-list" class="meeting-list"></ul>
+    </aside>
+
+    <section class="content">
+      <div id="empty-state" class="empty">왼쪽에서 회의록을 선택하거나 새로 만들어 주세요.</div>
+      <div id="doc-view" hidden>
+        <div class="doc-toolbar">
+          <span id="save-state" class="muted small"></span>
+          <div class="spacer"></div>
+          <button id="print-btn" class="btn ghost small">인쇄 / PDF</button>
+          <button id="delete-btn" class="btn danger small">회의록 삭제</button>
+        </div>
+        <div class="paper">
+          <h1 id="doc-title" class="doc-title"></h1>
+          <table class="minutes">
+            <colgroup>
+              <col class="c-cat" /><col class="c-label" /><col class="c-content" />
+              <col class="c-chk" /><col class="c-chk" /><col class="c-chk" /><col class="c-act" />
+            </colgroup>
+            <thead>
+              <tr>
+                <th>구분</th>
+                <th colspan="2">내용</th>
+                <th>교수님</th><th>실장님</th><th>담당자</th>
+                <th class="no-print"></th>
+              </tr>
+            </thead>
+            <tbody id="minutes-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="config.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
