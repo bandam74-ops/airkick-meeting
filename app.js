@@ -113,7 +113,7 @@ class FirebaseStore {
     this.unsub?.();
     this.unsub = this.fs.onSnapshot(this.col, (snap) => {
       const d = {}; snap.forEach((doc) => { d[doc.id] = doc.data(); }); fn(d);
-    }, (err) => alert('데이터를 불러오지 못했습니다: ' + err.message));
+    }, (err) => alert(err.code === 'permission-denied' ? '운영진으로 등록되지 않은 계정입니다. 관리자에게 등록을 요청하세요.' : '데이터를 불러오지 못했습니다: ' + err.message));
   }
   // 공유 링크용: 로그인 없이 회의록 하나만 실시간으로 읽기
   watchOne(id, fn) {

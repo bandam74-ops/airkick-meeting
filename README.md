@@ -9,17 +9,15 @@
 - **공유 링크 복사**: 회의록마다 고유 링크(`?m=...`)가 있습니다. 링크를 받은 사람은 로그인 없이 그 회의록 하나만 **읽기 전용**으로 보고, 누가 언제 체크했는지도 함께 보입니다. 내용이 바뀌면 실시간으로 반영됩니다.
 - 처음 체크할 때 **표시될 이름**(예: 이감독)을 한 번 물어봅니다. 오른쪽 위 이름을 눌러 바꿀 수 있습니다.
 
-## 운영진 공유 설정 (Firebase, 무료)
+## Firebase 설정 (완료)
 
-`config.js` 가 `null` 이면 **로컬 모드**라서 각자 브라우저에만 저장됩니다.
-운영진이 같은 회의록을 보려면 한 번만 아래를 설정하세요.
+- 프로젝트: `airkick-meeting` · Firestore(서울, asia-northeast3) · 보안 규칙: `firestore.rules`
+- 규칙 배포: `npx firebase-tools deploy --only firestore:rules`
 
-1. https://console.firebase.google.com 에서 프로젝트 만들기
-2. **Build → Firestore Database** → 데이터베이스 만들기 (위치: `asia-northeast3 (서울)`)
-3. Firestore **규칙** 탭에 이 저장소의 `firestore.rules` 내용을 붙여넣고 게시 (공유 링크로 회의록 하나씩 읽기는 허용, 목록·수정은 로그인 필요)
-4. **Build → Authentication** → 시작하기 → 로그인 방법에서 **이메일/비밀번호** 사용 설정
-5. Authentication **사용자** 탭에서 운영진 계정(이메일·비밀번호)을 추가
-6. Authentication **설정 → 승인된 도메인**에 `bandam74-ops.github.io` 추가
-7. 프로젝트 설정(⚙) → **내 앱 → 웹 앱 추가(</>)** → 나오는 `firebaseConfig` 값을 `config.js` 의 `window.FIREBASE_CONFIG` 에 붙여넣고 커밋
+### 운영진 계정 추가
+1. Firebase 콘솔 → Authentication → 사용자 → **사용자 추가** (이메일·비밀번호)
+2. 추가된 사용자의 **사용자 UID** 복사
+3. Firestore → 데이터 → `staff` 컬렉션에 문서 ID = 그 UID 로 문서 추가 (필드 예: `name` = 이감독)
 
-> Firebase 웹 설정값(apiKey 등)은 공개되어도 되는 값입니다. 데이터 보호는 로그인 + Firestore 규칙이 담당합니다.
+`staff` 에 등록된 계정만 회의록을 보고 고칠 수 있습니다. (가입만 해서는 접근 불가)
+공유 링크로는 누구나 그 회의록 하나만 읽기 전용으로 볼 수 있습니다.
