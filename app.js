@@ -78,6 +78,9 @@ class LocalStore {
   emit() { const d = this.load(); this.fns.forEach((f) => f(d)); }
   async init(onUser) { onUser({ email: null }); }
   watchAll(fn) { this.fns.add(fn); fn(this.load()); }
+  watchOne(id, fn) { this.watchAll((d) => fn(d[id] || null)); }
+  getName() { try { return localStorage.getItem('airkick-name') || ''; } catch { return ''; } }
+  async setName(n) { try { localStorage.setItem('airkick-name', n); } catch {} }
   async get(id) { return this.load()[id] || null; }
   async create(id, data) { const d = this.load(); d[id] = data; this.save(d); }
   async update(id, fields) {
@@ -112,6 +115,12 @@ class FirebaseStore {
       const d = {}; snap.forEach((doc) => { d[doc.id] = doc.data(); }); fn(d);
     }, (err) => alert('데이터를 불러오지 못했습니다: ' + err.message));
   }
+  // 공유 링크용: 로그인 없이 회의록 하나만 실시간으로 읽기
+  watchOne(id, fn) {
+    this.fs.onSnapshot(this.fs.doc(this.col, id), (s) => fn(s.exists() ? s.data() : null), () => fn(null));
+  }
+  getName() { return this.auth.currentUser?.displayName || ''; }
+  async setName(n) { await this.authLib.updateProfile(this.auth.currentUser, { displayName: n }); }
   async get(id) { const s = await this.fs.getDoc(this.fs.doc(this.col, id)); return s.exists() ? s.data() : null; }
   create(id, data) { return this.fs.setDoc(this.fs.doc(this.col, id), data); }
   update(id, fields) {
@@ -124,10 +133,17 @@ class FirebaseStore {
 
 // ---------------------------------------------------------------- state
 const store = window.FIREBASE_CONFIG ? new FirebaseStore(window.FIREBASE_CONFIG) : new LocalStore();
+const SHARE_ID = new URLSearchParams(location.search).get('m');   // ?m=<id> 이면 공유(읽기 전용) 화면
+const readonly = !!SHARE_ID;
 let me = null;            // 로그인 사용자
-let all = {};             // { 'YYYY-MM-DD': meeting }
+let all = {};             // { id: meeting }
 let currentId = null;
 let renderedSig = '';     // 행 구성 시그니처 (바뀌면 다시 그림)
+
+const dateOf = (id) => all[id]?.date || id;
+const fmtTime = (at) => { const d = new Date(at); return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const checkerName = (v) => v.name || userLabel(v.by);
+const shareUrl = (id) => `${location.origin}${location.pathname}?m=${encodeURIComponent(id)}`;
 
 function sortedRows(m, section) {
   return Object.entries(m.rows || {})
@@ -146,14 +162,28 @@ async function save(fields, msg = '저장됨') {
   catch (e) { s.textContent = '저장 실패'; alert('저장 실패: ' + e.message); }
 }
 
+// 체크할 때 표시될 내 이름 (처음 한 번 물어봄)
+async function ensureName() {
+  let n = store.getName();
+  if (n) return n;
+  n = (prompt('체크할 때 표시될 이름을 입력하세요 (예: 이감독, 김실장)', me?.email ? userLabel(me.email) : '') || '').trim();
+  if (!n) return null;
+  await store.setName(n); showUserName();
+  return n;
+}
+function showUserName() {
+  const n = store.getName();
+  $('#user-name').textContent = n ? `${n} 님` : (me?.email ? userLabel(me.email) : '이름 설정');
+}
+
 // ---------------------------------------------------------------- list
 function renderList() {
   const q = $('#search').value.trim().toLowerCase();
   const ul = $('#meeting-list'); ul.replaceChildren();
-  const ids = Object.keys(all).sort().reverse().filter((id) => {
+  const ids = Object.keys(all).sort((a, b) => dateOf(b).localeCompare(dateOf(a))).filter((id) => {
     if (!q) return true;
     const m = all[id];
-    const text = [id, m.title, ...Object.values(m.rows || {}).map((r) => `${r.label || ''} ${r.content || ''}`)].join(' ').toLowerCase();
+    const text = [dateOf(id), m.title, ...Object.values(m.rows || {}).map((r) => `${r.label || ''} ${r.content || ''}`)].join(' ').toLowerCase();
     return text.includes(q);
   });
   if (!ids.length) ul.append(el('li', { class: 'muted small pad' }, q ? '검색 결과 없음' : '아직 회의록이 없습니다.'));
@@ -161,7 +191,7 @@ function renderList() {
     const p = progress(all[id]);
     const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
     ul.append(el('li', { class: id === currentId ? 'active' : '', onclick: () => select(id) },
-      el('div', { class: 'li-date' }, dateLabel(id)),
+      el('div', { class: 'li-date' }, dateLabel(dateOf(id))),
       el('div', { class: 'li-meta' },
         el('span', { class: 'bar' }, el('i', { style: `width:${pct}%` })),
         el('span', { class: 'small muted' }, `${p.done}/${p.total}`))));
@@ -178,6 +208,7 @@ function select(id) {
 function autoGrow(t) { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }
 
 function textArea(rowId, field, value, placeholder, cls) {
+  if (readonly) return el('div', { class: cls + ' ro' }, value || '');
   let timer;
   const t = el('textarea', { class: cls, rows: 1, placeholder, 'data-row': rowId, 'data-field': field });
   t.value = value || '';
@@ -188,17 +219,30 @@ function textArea(rowId, field, value, placeholder, cls) {
   return t;
 }
 
+// 체크한 사람 이름 + 시간
+function whoText(v) { return v ? [el('b', {}, checkerName(v)), el('br'), fmtTime(v.at)] : []; }
+
 function checkCell(rowId, row, c) {
   const v = row.checks?.[c.key];
+  if (readonly) {
+    return el('td', { class: 'chk' }, el('div', { class: 'chk-wrap' },
+      el('span', { class: 'ro-box' + (v ? ' on' : '') }, v ? '✔' : ''),
+      el('span', { class: 'who' }, ...whoText(v))));
+  }
   const box = el('input', { type: 'checkbox', checked: !!v, 'data-row': rowId, 'data-check': c.key,
-    title: v ? `${userLabel(v.by)} · ${new Date(v.at).toLocaleString('ko-KR')}` : `${c.name} 확인`,
-    onchange: (e) => save({ [`rows.${rowId}.checks.${c.key}`]: e.target.checked ? { by: me?.email || null, at: Date.now() } : DELETE },
-      e.target.checked ? `${c.name} 확인` : `${c.name} 확인 취소`) });
+    title: v ? `${checkerName(v)} · ${new Date(v.at).toLocaleString('ko-KR')}` : `${c.name} 확인`,
+    onchange: async (e) => {
+      if (!e.target.checked) return save({ [`rows.${rowId}.checks.${c.key}`]: DELETE }, `${c.name} 확인 취소`);
+      const name = await ensureName();
+      if (!name) { e.target.checked = false; return; }
+      save({ [`rows.${rowId}.checks.${c.key}`]: { by: me?.email || null, name, at: Date.now() } }, `${c.name} 확인`);
+    } });
   return el('td', { class: 'chk' }, el('label', { class: 'chk-wrap' }, box,
-    el('span', { class: 'who', 'data-who': `${rowId}.${c.key}` }, v ? userLabel(v.by) : '')));
+    el('span', { class: 'who', 'data-who': `${rowId}.${c.key}` }, ...whoText(v))));
 }
 
 function rowActions(m, rowId, section) {
+  if (readonly) return null;
   const list = sortedRows(m, section);
   const idx = list.findIndex(([id]) => id === rowId);
   const swap = (j) => {
@@ -218,6 +262,7 @@ function rowActions(m, rowId, section) {
 }
 
 function addRowButton(m, section, text) {
+  if (readonly) return null;
   const list = sortedRows(m, section);
   const next = list.length ? (list[list.length - 1][1].order ?? list.length) + 1 : 0;
   return el('button', { class: 'add-row no-print', onclick: () =>
@@ -232,18 +277,21 @@ function renderDoc() {
   const m = currentId && all[currentId];
   $('#empty-state').hidden = !!m; $('#doc-view').hidden = !m;
   if (!m) return;
-  $('#doc-title').textContent = m.title || titleFor(currentId);
+  const title = m.title || titleFor(dateOf(currentId));
+  $('#doc-title').textContent = title;
+  document.title = `${title} · 에어킥 회의록`;
 
   const sig = sigOf(m);
-  if (sig === renderedSig) return patchDoc(m);
+  if (!readonly && sig === renderedSig) return patchDoc(m);
   renderedSig = sig;
 
+  const actPad = () => (readonly ? null : el('td', { class: 'act no-print' }));
   const tbody = $('#minutes-body'); tbody.replaceChildren();
   for (const s of SECTIONS) {
     const trs = [];
     if (s.groups) {
       for (const g of s.groups) {
-        trs.push(el('tr', { class: 'group-head' }, el('td', { colspan: 5 }, g.title, ' ', addRowButton(m, g.key, '+ 항목')), el('td', { class: 'act no-print' })));
+        trs.push(el('tr', { class: 'group-head' }, el('td', { colspan: 5 }, g.title, ' ', addRowButton(m, g.key, '+ 항목')), actPad()));
         sortedRows(m, g.key).forEach(([id, r], i) => trs.push(el('tr', {},
           el('td', { colspan: 2, class: 'content' }, el('div', { class: 'numbered' },
             el('span', { class: 'num' }, `${i + 1}.`), textArea(id, 'content', r.content, '내용 입력', 'cell'))),
@@ -254,10 +302,10 @@ function renderDoc() {
         el('td', { class: 'label' }, textArea(id, 'label', r.label, s.labelPlaceholder, 'cell center')),
         el('td', { class: 'content' }, textArea(id, 'content', r.content, '내용 입력', 'cell')),
         ...CHECKS.map((c) => checkCell(id, r, c)), rowActions(m, id, s.key))));
-      trs.push(el('tr', { class: 'add-line no-print' }, el('td', { colspan: 5 }, addRowButton(m, s.key, `+ ${s.name} 행 추가`)), el('td', { class: 'act' })));
+      if (!readonly) trs.push(el('tr', { class: 'add-line no-print' }, el('td', { colspan: 5 }, addRowButton(m, s.key, `+ ${s.name} 행 추가`)), actPad()));
+      if (!trs.length) trs.push(el('tr', {}, el('td', { colspan: 5, class: 'muted pad' }, '-')));
     }
-    const cat = el('th', { class: 'cat', rowspan: trs.length, scope: 'rowgroup' }, s.name);
-    trs[0].prepend(cat);
+    trs[0].prepend(el('th', { class: 'cat', rowspan: trs.length, scope: 'rowgroup' }, s.name));
     tbody.append(...trs);
   }
 }
@@ -272,19 +320,20 @@ function patchDoc(m) {
   document.querySelectorAll('#minutes-body input[data-check]').forEach((b) => {
     const v = m.rows[b.dataset.row]?.checks?.[b.dataset.check];
     b.checked = !!v;
-    b.title = v ? `${userLabel(v.by)} · ${new Date(v.at).toLocaleString('ko-KR')}` : '';
+    b.title = v ? `${checkerName(v)} · ${new Date(v.at).toLocaleString('ko-KR')}` : '';
     const who = document.querySelector(`[data-who="${b.dataset.row}.${b.dataset.check}"]`);
-    if (who) who.textContent = v ? userLabel(v.by) : '';
+    if (who) who.replaceChildren(...whoText(v));
   });
 }
 
-// ---------------------------------------------------------------- create / delete
+// ---------------------------------------------------------------- create / delete / share
 async function createMeeting() {
   const date = $('#new-date').value;
   if (!date) return alert('날짜를 선택하세요.');
-  if (all[date]) { if (confirm('이미 해당 날짜의 회의록이 있습니다. 열까요?')) select(date); return; }
+  const existing = Object.keys(all).find((id) => dateOf(id) === date);
+  if (existing) { if (confirm('이미 해당 날짜의 회의록이 있습니다. 열까요?')) select(existing); return; }
   const rows = {};
-  const prevId = Object.keys(all).filter((id) => id < date).sort().pop();
+  const prevId = Object.keys(all).filter((id) => dateOf(id) < date).sort((a, b) => dateOf(a).localeCompare(dateOf(b))).pop();
   if ($('#copy-prev').checked && prevId) {
     // 이전 회의록의 내용을 복사 (체크는 초기화, 금일 특이사항은 비움)
     for (const r of Object.values(all[prevId].rows || {})) {
@@ -296,15 +345,24 @@ async function createMeeting() {
   } else {
     DEFAULT_ROWS.forEach(([section, label], i) => { rows[uid()] = { section, label, content: '', order: i, checks: {} }; });
   }
-  await store.create(date, { title: titleFor(date), date, rows, createdAt: Date.now(), createdBy: me?.email || null, updatedAt: Date.now() });
-  select(date);
+  // 공유 링크에 쓰이므로 추측하기 어려운 무작위 ID 사용
+  const id = uid() + uid();
+  await store.create(id, { title: titleFor(date), date, rows, createdAt: Date.now(), createdBy: me?.email || null, updatedAt: Date.now() });
+  select(id);
 }
 
 async function deleteMeeting() {
   if (!currentId) return;
-  if (!confirm(`${dateLabel(currentId)} 회의록을 삭제할까요? 되돌릴 수 없습니다.`)) return;
+  if (!confirm(`${dateLabel(dateOf(currentId))} 회의록을 삭제할까요? 되돌릴 수 없습니다.`)) return;
   await store.remove(currentId);
   currentId = null; location.hash = '';
+}
+
+async function copyShareLink() {
+  const url = shareUrl(currentId);
+  try { await navigator.clipboard.writeText(url); $('#save-state').textContent = '공유 링크가 복사되었습니다'; }
+  catch { prompt('아래 링크를 복사하세요', url); }
+  if (store.mode === 'local') alert('지금은 로컬 모드라 이 링크는 이 브라우저에서만 열립니다.\nFirebase를 연결하면 누구에게나 공유할 수 있습니다.');
 }
 
 // ---------------------------------------------------------------- boot
@@ -312,8 +370,8 @@ function showApp(user) {
   me = user;
   $('#login-view').hidden = !!user; $('#app-view').hidden = !user;
   $('#logout-btn').hidden = !(user && store.mode === 'cloud');
-  $('#user-name').textContent = user ? (store.mode === 'cloud' ? userLabel(user.email) : '') : '';
-  if (!user) return;
+  if (!user) { $('#user-name').textContent = ''; return; }
+  showUserName();
   store.watchAll((d) => {
     all = d;
     if (!currentId) { const h = decodeURIComponent(location.hash.slice(1)); if (all[h]) currentId = h; }
@@ -322,15 +380,41 @@ function showApp(user) {
   });
 }
 
+// 공유 링크 화면: 로그인 없이 읽기 전용, 체크한 사람·시간 표시
+function showShared() {
+  document.body.classList.add('shared');
+  $('#app-view').hidden = false; $('#login-view').hidden = true;
+  $('#mode-badge').textContent = '공유된 회의록 · 읽기 전용';
+  $('#edit-link').href = `${location.pathname}#${encodeURIComponent(SHARE_ID)}`;
+  currentId = SHARE_ID;
+  $('#empty-state').textContent = '불러오는 중…';
+  store.watchOne(SHARE_ID, (m) => {
+    if (m) all = { [SHARE_ID]: m };
+    else { all = {}; $('#empty-state').textContent = '회의록을 찾을 수 없습니다. 링크를 확인해 주세요.'; }
+    renderDoc();
+    const t = m && (m.updatedAt || m.createdAt);
+    $('#save-state').textContent = t ? `마지막 수정 ${new Date(t).toLocaleString('ko-KR')}` : '';
+  });
+}
+
 function boot() {
   $('#mode-badge').textContent = store.mode === 'cloud' ? '공유 모드' : '로컬 모드 (공유 안 됨)';
   $('#mode-badge').classList.add(store.mode);
+  $('#print-btn').onclick = () => window.print();
+  if (SHARE_ID) {
+    store.init(() => {}).then(showShared).catch((e) => alert('초기화 실패: ' + e.message));
+    return;
+  }
   $('#new-date').value = todayStr();
   $('#new-btn').onclick = createMeeting;
   $('#delete-btn').onclick = deleteMeeting;
-  $('#print-btn').onclick = () => window.print();
+  $('#share-btn').onclick = copyShareLink;
   $('#search').oninput = renderList;
   $('#logout-btn').onclick = () => store.logout();
+  $('#user-name').onclick = async () => {
+    const n = (prompt('체크할 때 표시될 이름', store.getName()) || '').trim();
+    if (n) { await store.setName(n); showUserName(); }
+  };
   window.addEventListener('hashchange', () => { const h = decodeURIComponent(location.hash.slice(1)); if (all[h] && h !== currentId) select(h); });
   $('#login-form').onsubmit = async (e) => {
     e.preventDefault(); $('#login-error').textContent = '';

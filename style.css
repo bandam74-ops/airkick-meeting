@@ -49,7 +49,7 @@ input[type=email], input[type=password], input[type=date], input[type=search] { 
 .doc-title { text-align: center; font-size: 22px; font-weight: 700; margin: 0 0 22px; }
 
 table.minutes { width: 100%; min-width: 760px; border-collapse: collapse; table-layout: fixed; border: 2px solid var(--line); }
-.c-cat { width: 96px; } .c-label { width: 140px; } .c-chk { width: 58px; } .c-act { width: 74px; }
+.c-cat { width: 96px; } .c-label { width: 140px; } .c-chk { width: 70px; } .c-act { width: 74px; }
 .minutes th, .minutes td { border: 1px solid var(--line); padding: 0; vertical-align: middle; }
 .minutes thead th { background: var(--head); padding: 12px 4px; font-weight: 600; border-bottom: 3px double var(--line); }
 .minutes thead th:last-child, .minutes td.act { border: none; border-left: 2px solid var(--line); background: var(--bg); }
@@ -72,6 +72,22 @@ td.act { white-space: nowrap; text-align: center; }
 .icon { border: 0; background: none; cursor: pointer; color: var(--muted); padding: 2px 3px; font-size: 11px; }
 .icon:hover { color: var(--ink); } .icon.del:hover { color: var(--accent); }
 
+.user-btn { background: none; border: 0; color: #fff; cursor: pointer; font: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
+.user-btn:empty { display: none; }
+a.btn { text-decoration: none; display: inline-block; }
+.who { font-size: 10.5px; line-height: 1.3; text-align: center; max-width: none; white-space: nowrap; overflow: visible; }
+.who b { color: var(--ink); font-weight: 600; }
+
+/* 공유(읽기 전용) 화면 */
+.shared-only { display: none !important; }
+body.shared .shared-only { display: inline-block !important; }
+body.shared .edit-only, body.shared .sidebar, body.shared .c-act { display: none !important; }
+body.shared .layout { grid-template-columns: 1fr; }
+body.shared .minutes thead th:last-child { display: none; }
+.cell.ro { white-space: pre-wrap; word-break: break-word; padding: 8px 10px; line-height: 1.55; min-height: 38px; }
+.ro-box { width: 20px; height: 20px; border: 1.5px solid #9ca3af; border-radius: 4px; display: grid; place-items: center; font-size: 13px; color: #fff; }
+.ro-box.on { background: var(--accent); border-color: var(--accent); }
+
 @media (max-width: 760px) {
   .layout { grid-template-columns: 1fr; }
   .sidebar { border-right: 0; border-bottom: 1px solid var(--soft); }
@@ -82,7 +98,8 @@ td.act { white-space: nowrap; text-align: center; }
 
 @media print {
   body { background: #fff; }
-  .topbar, .sidebar, .doc-toolbar, .no-print, .who { display: none !important; }
+  .topbar, .sidebar, .doc-toolbar, .no-print { display: none !important; }
+  .ro-box { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .layout { display: block; } .content { padding: 0; }
   .paper { box-shadow: none; padding: 0; max-width: none; }
   table.minutes { min-width: 0; }

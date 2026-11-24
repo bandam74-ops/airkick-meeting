@@ -11,7 +11,7 @@
     <div class="brand">AIR-KICK <span>회의록</span></div>
     <div class="top-right">
       <span id="mode-badge" class="badge"></span>
-      <span id="user-name" class="user"></span>
+      <button id="user-name" class="user-btn edit-only" title="체크할 때 표시될 이름 바꾸기"></button>
       <button id="logout-btn" class="btn ghost small" hidden>로그아웃</button>
     </div>
   </header>
@@ -47,8 +47,10 @@
         <div class="doc-toolbar">
           <span id="save-state" class="muted small"></span>
           <div class="spacer"></div>
+          <a id="edit-link" class="btn ghost small shared-only" href="./">운영진 편집하기</a>
+          <button id="share-btn" class="btn primary small edit-only">공유 링크 복사</button>
           <button id="print-btn" class="btn ghost small">인쇄 / PDF</button>
-          <button id="delete-btn" class="btn danger small">회의록 삭제</button>
+          <button id="delete-btn" class="btn danger small edit-only">회의록 삭제</button>
         </div>
         <div class="paper">
           <h1 id="doc-title" class="doc-title"></h1>
