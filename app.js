@@ -108,6 +108,7 @@ class FirebaseStore {
     auth.onAuthStateChanged(this.auth, (u) => onUser(u));
   }
   login(email, pw) { return this.authLib.signInWithEmailAndPassword(this.auth, email, pw); }
+  resetPassword(email) { this.auth.languageCode = 'ko'; return this.authLib.sendPasswordResetEmail(this.auth, email); }
   logout() { this.unsub?.(); return this.authLib.signOut(this.auth); }
   watchAll(fn) {
     this.unsub?.();
@@ -416,6 +417,12 @@ function boot() {
     if (n) { await store.setName(n); showUserName(); }
   };
   window.addEventListener('hashchange', () => { const h = decodeURIComponent(location.hash.slice(1)); if (all[h] && h !== currentId) select(h); });
+  $('#reset-btn').onclick = async () => {
+    const email = $('#login-email').value.trim() || (prompt('가입한 이메일을 입력하세요') || '').trim();
+    if (!email) return;
+    try { await store.resetPassword(email); $('#login-error').textContent = `${email} 로 비밀번호 재설정 메일을 보냈습니다.`; }
+    catch { $('#login-error').textContent = '메일을 보내지 못했습니다. 이메일을 확인하세요.'; }
+  };
   $('#login-form').onsubmit = async (e) => {
     e.preventDefault(); $('#login-error').textContent = '';
     try { await store.login($('#login-email').value.trim(), $('#login-pw').value); }

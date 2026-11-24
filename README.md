@@ -15,9 +15,12 @@
 - 규칙 배포: `npx firebase-tools deploy --only firestore:rules`
 
 ### 운영진 계정 추가
-1. Firebase 콘솔 → Authentication → 사용자 → **사용자 추가** (이메일·비밀번호)
-2. 추가된 사용자의 **사용자 UID** 복사
-3. Firestore → 데이터 → `staff` 컬렉션에 문서 ID = 그 UID 로 문서 추가 (필드 예: `name` = 이감독)
+```
+node tools/add-staff.js 이감독 abc@gmail.com          # 임시 비밀번호 자동 생성
+node tools/add-staff.js 김실장 kim@gmail.com 원하는비번  # 비밀번호 지정
+```
+(이 컴퓨터에서 `npx firebase-tools login` 으로 프로젝트 소유자 계정에 로그인되어 있어야 합니다.)
+운영진은 로그인 화면의 **비밀번호 재설정 메일 받기**로 비밀번호를 직접 바꿀 수 있습니다.
 
 `staff` 에 등록된 계정만 회의록을 보고 고칠 수 있습니다. (가입만 해서는 접근 불가)
 공유 링크로는 누구나 그 회의록 하나만 읽기 전용으로 볼 수 있습니다.
